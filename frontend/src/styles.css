@@ -208,6 +208,18 @@ th {
   grid-column: 1 / -1;
 }
 
+.inline-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.inline-check input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -291,6 +303,10 @@ textarea:focus {
 }
 .badge.fallow {
   background: #e8e2d8;
+}
+.badge.paused {
+  background: #edd9d4;
+  color: var(--danger);
 }
 .badge.scheduled {
   background: #e4efdc;

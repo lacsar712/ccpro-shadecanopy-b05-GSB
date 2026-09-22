@@ -35,6 +35,7 @@ class Zone(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_IDLE
     )
+    is_paused = models.BooleanField(default=False, verbose_name="是否暂停")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

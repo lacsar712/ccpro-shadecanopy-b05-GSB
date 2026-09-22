@@ -1,6 +1,10 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../api'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const list = ref([])
 const greenhouses = ref([])
@@ -79,6 +83,26 @@ async function remove(id) {
   await load()
 }
 
+async function togglePause(row) {
+  const action = row.isPaused ? 'resume' : 'pause'
+  const tip = row.isPaused
+    ? `确认恢复分区 ${row.zoneCode}？恢复后可新建气候记录与轮灌。`
+    : `确认暂停分区 ${row.zoneCode}？暂停后将禁止新建气候记录与轮灌，已有数据仍可查询。`
+  if (!confirm(tip)) return
+  error.value = ''
+  try {
+    const { data } = await api.post(`/zones/${row.id}/${action}/`)
+    const target = list.value.find((z) => z.id === row.id)
+    if (target) target.isPaused = data.isPaused
+  } catch (e) {
+    error.value =
+      e.response?.data?.detail ||
+      (e.response?.status === 403
+        ? '仅管理员可暂停 / 恢复分区'
+        : '切换暂停状态失败')
+  }
+}
+
 onMounted(async () => {
   await loadGreenhouses()
   await load()
@@ -90,7 +114,7 @@ onMounted(async () => {
     <div class="page-head">
       <div>
         <h1>分区管理</h1>
-        <p>同温室 zoneCode 唯一；状态 idle / growing / fallow</p>
+        <p>同温室 zoneCode 唯一；状态 idle / growing / fallow；暂停区禁止新建气候与轮灌（仅管理员可切换）</p>
       </div>
       <div class="actions">
         <select v-model="filterGreenhouseId" @change="load">
@@ -136,6 +160,7 @@ onMounted(async () => {
             <th>编码</th>
             <th>作物</th>
             <th>状态</th>
+            <th>暂停</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -146,8 +171,20 @@ onMounted(async () => {
             <td>{{ row.zoneCode }}</td>
             <td>{{ row.cropName || '—' }}</td>
             <td><span class="badge" :class="row.status">{{ statusLabel[row.status] || row.status }}</span></td>
+            <td>
+              <span v-if="row.isPaused" class="badge paused">已暂停</span>
+              <span v-else class="badge">正常</span>
+            </td>
             <td class="actions">
               <button class="btn ghost" @click="edit(row)">编辑</button>
+              <button
+                v-if="isAdmin"
+                class="btn"
+                :class="row.isPaused ? 'secondary' : 'danger'"
+                @click="togglePause(row)"
+              >
+                {{ row.isPaused ? '恢复' : '暂停' }}
+              </button>
               <button class="btn danger" @click="remove(row.id)">删除</button>
             </td>
           </tr>

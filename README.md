@@ -46,10 +46,25 @@ docker compose down
 
 1. **Auth**：JWT `POST /api/auth/token/`，当前用户 `GET /api/auth/me/`
 2. **Greenhouse**：name / location / areaM2 / notes
-3. **Zone**：greenhouseId / zoneCode / cropName / status(`idle|growing|fallow`)；同温室 zoneCode 唯一
+3. **Zone**：greenhouseId / zoneCode / cropName / status(`idle|growing|fallow`) / isPaused；同温室 zoneCode 唯一
 4. **ClimateLog**：zoneId / recordedAt / tempC / humidityPct / parUmol / co2Ppm；**humidityPct ∈ [20, 100]**
 5. **IrrigationCycle**：zoneId / startAt / durationMin / waterLiters / status(`scheduled|running|done|skipped`)
-6. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数 → `GET /api/dashboard/`
+6. **Dashboard**：温室数、growing 分区数、暂停分区数、近 24h 气候日志数、今日 scheduled 轮灌数 → `GET /api/dashboard/`
+
+### 分区暂停规则
+
+- 分区新增只读字段 `isPaused`（是否暂停，默认 `false`）；分区列表默认仍返回暂停区，每行都带 `isPaused`。
+- **仅管理员（role=admin）**可切换暂停：
+  - `POST /api/zones/{id}/pause/`：暂停分区
+  - `POST /api/zones/{id}/resume/`：恢复分区
+  - 种植员（role=grower）调用返回 **403**；两个接口响应体均为 `{ "id", "zoneCode", "isPaused" }`。
+  - `isPaused` 不接受经普通新建 / 编辑接口写入（序列化器中为只读），只能经上述两个管理员接口切换。
+- 分区暂停后：
+  - **新建**气候记录或轮灌到该分区一律返回 **409**，`detail` 为中文并明确包含「暂停 / 禁止新建」。
+  - 该分区**已有**气候、轮灌数据仍可查询，也可**单条更新**（改温湿度、时间、状态等）。
+  - 但不得借更新把气候或轮灌的所属分区改到已暂停区，违反时同样返回 **409**。
+- 仪表盘 `pausedZoneCount` 与 `isPaused = true` 的分区数严格一致。
+- 前端：分区页每行有「已暂停 / 正常」标记，管理员可见「暂停 / 恢复」按钮；新建轮灌的分区下拉默认排除暂停区，勾选「显示暂停分区」后可展开（编辑中原属暂停区的轮灌记录时，该分区在下拉中仍可见）。
 
 ## API 一览
 
@@ -60,9 +75,11 @@ docker compose down
 | GET | `/api/auth/me/` |
 | CRUD | `/api/greenhouses/` |
 | CRUD | `/api/zones/?greenhouseId=&status=` |
-| CRUD | `/api/climate-logs/?zoneId=` |
-| CRUD | `/api/irrigation-cycles/?zoneId=&status=` |
-| GET | `/api/dashboard/` |
+| POST | `/api/zones/{id}/pause/`（仅管理员，种植员 403） |
+| POST | `/api/zones/{id}/resume/`（仅管理员，种植员 403） |
+| CRUD | `/api/climate-logs/?zoneId=`（目标分区暂停时新建返回 409） |
+| CRUD | `/api/irrigation-cycles/?zoneId=&status=`（目标分区暂停时新建返回 409） |
+| GET | `/api/dashboard/`（含 `pausedZoneCount`） |
 
 字段对外使用 camelCase（如 `areaM2`、`zoneCode`、`humidityPct`）。
 

@@ -3,11 +3,12 @@ from datetime import timedelta
 from django.db.models import Count
 from django.utils import timezone
 from rest_framework import viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from .permissions import IsAdminRole
 from .serializers import (
     ClimateLogSerializer,
     GreenhouseSerializer,
@@ -33,6 +34,25 @@ class ZoneViewSet(viewsets.ModelViewSet):
         if status:
             qs = qs.filter(status=status)
         return qs
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAdminRole])
+    def pause(self, request, pk=None):
+        # 仅管理员可切换暂停；种植员调用由 IsAdminRole 返回 403。
+        zone = self.get_object()
+        zone.is_paused = True
+        zone.save(update_fields=["is_paused", "updated_at"])
+        return Response(
+            {"id": zone.id, "zoneCode": zone.zone_code, "isPaused": zone.is_paused}
+        )
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAdminRole])
+    def resume(self, request, pk=None):
+        zone = self.get_object()
+        zone.is_paused = False
+        zone.save(update_fields=["is_paused", "updated_at"])
+        return Response(
+            {"id": zone.id, "zoneCode": zone.zone_code, "isPaused": zone.is_paused}
+        )
 
 
 class ClimateLogViewSet(viewsets.ModelViewSet):
@@ -71,6 +91,7 @@ def dashboard_stats(request):
     data = {
         "greenhouseCount": Greenhouse.objects.count(),
         "growingZoneCount": Zone.objects.filter(status=Zone.STATUS_GROWING).count(),
+        "pausedZoneCount": Zone.objects.filter(is_paused=True).count(),
         "climateLogLast24h": ClimateLog.objects.filter(
             recorded_at__gte=since_24h
         ).count(),

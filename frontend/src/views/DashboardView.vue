@@ -39,6 +39,10 @@ onMounted(async () => {
         <div class="value">{{ stats.growingZoneCount }}</div>
       </div>
       <div class="stat">
+        <div class="label">暂停分区</div>
+        <div class="value">{{ stats.pausedZoneCount }}</div>
+      </div>
+      <div class="stat">
         <div class="label">近 24h 气候日志</div>
         <div class="value">{{ stats.climateLogLast24h }}</div>
       </div>

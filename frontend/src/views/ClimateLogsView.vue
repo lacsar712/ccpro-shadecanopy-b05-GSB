@@ -83,7 +83,9 @@ async function save() {
     resetForm()
     await load()
   } catch (e) {
-    error.value = JSON.stringify(e.response?.data || '保存失败')
+    const data = e.response?.data
+    error.value =
+      data?.detail || (data && typeof data === 'object' ? JSON.stringify(data) : '保存失败')
   }
 }
 
@@ -123,7 +125,7 @@ onMounted(async () => {
           分区
           <select v-model="form.zoneId">
             <option v-for="z in zones" :key="z.id" :value="z.id">
-              {{ z.greenhouseName }} / {{ z.zoneCode }}
+              {{ z.greenhouseName }} / {{ z.zoneCode }}{{ z.isPaused ? '（已暂停）' : '' }}
             </option>
           </select>
         </label>

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../api'
 
 const list = ref([])
@@ -7,6 +7,7 @@ const zones = ref([])
 const error = ref('')
 const editingId = ref(null)
 const filterStatus = ref('')
+const showPausedZones = ref(false)
 
 function localInputValue(d = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
@@ -28,9 +29,17 @@ const statusLabel = {
   skipped: '已跳过',
 }
 
+// 新建轮灌默认不选暂停区；编辑中的记录若原属暂停区，仍保留该区可选。
+const selectableZones = computed(() => {
+  if (showPausedZones.value) return zones.value
+  return zones.value.filter((z) => !z.isPaused || z.id === form.zoneId)
+})
+
+const zoneMap = computed(() => new Map(zones.value.map((z) => [z.id, z])))
+
 function resetForm() {
   editingId.value = null
-  form.zoneId = zones.value[0]?.id || ''
+  form.zoneId = selectableZones.value[0]?.id || ''
   form.startAt = localInputValue()
   form.durationMin = 30
   form.waterLiters = 100
@@ -40,7 +49,9 @@ function resetForm() {
 async function loadZones() {
   const { data } = await api.get('/zones/')
   zones.value = data.results || data
-  if (!form.zoneId && zones.value.length) form.zoneId = zones.value[0].id
+  if (!form.zoneId && selectableZones.value.length) {
+    form.zoneId = selectableZones.value[0].id
+  }
 }
 
 async function load() {
@@ -64,6 +75,21 @@ function edit(row) {
   form.status = row.status
 }
 
+function onToggleShowPaused(show) {
+  // 关闭开关后，若当前选中区被过滤掉，回退到首个可选区。
+  if (show) return
+  if (!selectableZones.value.some((z) => z.id === form.zoneId)) {
+    form.zoneId = selectableZones.value[0]?.id || ''
+  }
+}
+
+function resolveError(e, fallback) {
+  const data = e.response?.data
+  if (data?.detail) return data.detail
+  if (data && typeof data === 'object') return JSON.stringify(data)
+  return fallback
+}
+
 async function save() {
   error.value = ''
   const payload = {
@@ -82,7 +108,7 @@ async function save() {
     resetForm()
     await load()
   } catch (e) {
-    error.value = JSON.stringify(e.response?.data || '保存失败')
+    error.value = resolveError(e, '保存失败')
   }
 }
 
@@ -122,10 +148,18 @@ onMounted(async () => {
         <label>
           分区
           <select v-model="form.zoneId">
-            <option v-for="z in zones" :key="z.id" :value="z.id">
-              {{ z.greenhouseName }} / {{ z.zoneCode }}
+            <option v-for="z in selectableZones" :key="z.id" :value="z.id">
+              {{ z.greenhouseName }} / {{ z.zoneCode }}{{ z.isPaused ? '（已暂停）' : '' }}
             </option>
           </select>
+        </label>
+        <label class="inline-check">
+          <input
+            type="checkbox"
+            :checked="showPausedZones"
+            @change="showPausedZones = $event.target.checked; onToggleShowPaused($event.target.checked)"
+          />
+          <span>显示暂停分区</span>
         </label>
         <label>开始时间<input v-model="form.startAt" type="datetime-local" /></label>
         <label>时长(分钟)<input v-model.number="form.durationMin" type="number" min="1" /></label>
@@ -162,7 +196,10 @@ onMounted(async () => {
         <tbody>
           <tr v-for="row in list" :key="row.id">
             <td>{{ new Date(row.startAt).toLocaleString() }}</td>
-            <td>{{ row.greenhouseName }} / {{ row.zoneCode }}</td>
+            <td>
+              {{ row.greenhouseName }} / {{ row.zoneCode }}
+              <span v-if="zoneMap.get(row.zoneId)?.isPaused" class="badge paused">已暂停</span>
+            </td>
             <td>{{ row.durationMin }} 分</td>
             <td>{{ row.waterLiters }} L</td>
             <td>
