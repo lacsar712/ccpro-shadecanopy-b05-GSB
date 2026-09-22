@@ -66,7 +66,8 @@ class Command(BaseCommand):
             greenhouse=g1, zone_code="A-02", crop_name="油麦菜", status=Zone.STATUS_GROWING
         )
         z3 = Zone.objects.create(
-            greenhouse=g1, zone_code="A-03", crop_name="", status=Zone.STATUS_IDLE
+            greenhouse=g1, zone_code="A-03", crop_name="", status=Zone.STATUS_IDLE,
+            is_paused=True,
         )
         z4 = Zone.objects.create(
             greenhouse=g2, zone_code="B-01", crop_name="红颜草莓", status=Zone.STATUS_GROWING

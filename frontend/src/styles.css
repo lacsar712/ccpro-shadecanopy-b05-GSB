@@ -305,6 +305,21 @@ textarea:focus {
   background: #edd9d4;
   color: var(--danger);
 }
+.badge.paused {
+  background: #f0d9c8;
+  color: #9a4f1f;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+}
+.check-label input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
 
 .error {
   color: var(--danger);

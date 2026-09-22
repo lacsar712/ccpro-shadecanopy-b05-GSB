@@ -11,8 +11,8 @@ class GreenhouseAdmin(admin.ModelAdmin):
 
 @admin.register(Zone)
 class ZoneAdmin(admin.ModelAdmin):
-    list_display = ("id", "greenhouse", "zone_code", "crop_name", "status")
-    list_filter = ("status", "greenhouse")
+    list_display = ("id", "greenhouse", "zone_code", "crop_name", "status", "is_paused")
+    list_filter = ("status", "is_paused", "greenhouse")
     search_fields = ("zone_code", "crop_name")
 
 

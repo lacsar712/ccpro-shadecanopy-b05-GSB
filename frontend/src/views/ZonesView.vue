@@ -1,10 +1,15 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../api'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const list = ref([])
 const greenhouses = ref([])
 const error = ref('')
+const pauseError = ref('')
 const editingId = ref(null)
 const filterGreenhouseId = ref('')
 const form = reactive({
@@ -69,7 +74,19 @@ async function save() {
     resetForm()
     await load()
   } catch (e) {
-    error.value = JSON.stringify(e.response?.data || '保存失败')
+    error.value = e.response?.data?.detail || JSON.stringify(e.response?.data || '保存失败')
+  }
+}
+
+async function togglePause(row) {
+  pauseError.value = ''
+  const next = !row.isPaused
+  if (next && !confirm(`确认暂停分区「${row.zoneCode}」？暂停后将禁止新建气候记录与轮灌。`)) return
+  try {
+    await api.post(`/zones/${row.id}/set-paused/`, { isPaused: next })
+    await load()
+  } catch (e) {
+    pauseError.value = e.response?.data?.detail || '切换暂停状态失败'
   }
 }
 
@@ -90,7 +107,7 @@ onMounted(async () => {
     <div class="page-head">
       <div>
         <h1>分区管理</h1>
-        <p>同温室 zoneCode 唯一；状态 idle / growing / fallow</p>
+        <p>同温室 zoneCode 唯一；状态 idle / growing / fallow；暂停后禁止新建气候记录与轮灌</p>
       </div>
       <div class="actions">
         <select v-model="filterGreenhouseId" @change="load">
@@ -127,6 +144,8 @@ onMounted(async () => {
       </div>
     </div>
 
+    <p v-if="pauseError" class="error">{{ pauseError }}</p>
+
     <div class="panel">
       <table>
         <thead>
@@ -136,6 +155,7 @@ onMounted(async () => {
             <th>编码</th>
             <th>作物</th>
             <th>状态</th>
+            <th>是否暂停</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -146,13 +166,22 @@ onMounted(async () => {
             <td>{{ row.zoneCode }}</td>
             <td>{{ row.cropName || '—' }}</td>
             <td><span class="badge" :class="row.status">{{ statusLabel[row.status] || row.status }}</span></td>
+            <td>
+              <span v-if="row.isPaused" class="badge paused">已暂停</span>
+              <span v-else class="badge">未暂停</span>
+            </td>
             <td class="actions">
+              <button v-if="isAdmin && !row.isPaused" class="btn ghost" @click="togglePause(row)">暂停</button>
+              <button v-else-if="isAdmin && row.isPaused" class="btn secondary" @click="togglePause(row)">恢复</button>
               <button class="btn ghost" @click="edit(row)">编辑</button>
               <button class="btn danger" @click="remove(row.id)">删除</button>
             </td>
           </tr>
         </tbody>
       </table>
+      <p v-if="!isAdmin" style="color:var(--muted);margin-bottom:0">
+        仅管理员可暂停 / 恢复分区；暂停分区的历史气候与轮灌数据仍可查询。
+      </p>
     </div>
   </div>
 </template>

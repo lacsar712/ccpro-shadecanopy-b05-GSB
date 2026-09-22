@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .exceptions import ZonePausedConflict
 from .models import ClimateLog, Greenhouse, IrrigationCycle, Zone
 
 
@@ -35,6 +36,7 @@ class ZoneSerializer(serializers.ModelSerializer):
     )
     zoneCode = serializers.CharField(source="zone_code")
     cropName = serializers.CharField(source="crop_name", allow_blank=True, required=False)
+    isPaused = serializers.BooleanField(source="is_paused", read_only=True)
     greenhouseName = serializers.CharField(source="greenhouse.name", read_only=True)
 
     class Meta:
@@ -46,10 +48,11 @@ class ZoneSerializer(serializers.ModelSerializer):
             "zoneCode",
             "cropName",
             "status",
+            "isPaused",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "greenhouseName", "created_at", "updated_at")
+        read_only_fields = ("id", "greenhouseName", "isPaused", "created_at", "updated_at")
 
     def validate(self, attrs):
         greenhouse = attrs.get("greenhouse") or getattr(self.instance, "greenhouse", None)
@@ -65,7 +68,28 @@ class ZoneSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class ClimateLogSerializer(serializers.ModelSerializer):
+class _ZonePausedGuardMixin:
+    """新建时目标区已暂停 → 409；更新时不得把记录转入已暂停区。"""
+
+    paused_action_label = "禁止新建记录"
+
+    def validate(self, attrs):
+        zone = attrs.get("zone")
+        if zone is None:
+            zone = getattr(self.instance, "zone", None)
+        if zone is None:
+            return attrs
+
+        if self.instance is None:
+            if zone.is_paused:
+                raise ZonePausedConflict(zone, f"{self.paused_action_label}，请先恢复该分区")
+        elif "zone" in attrs and zone.pk != self.instance.zone_id and zone.is_paused:
+            raise ZonePausedConflict(zone, "禁止通过更新把记录调整到已暂停分区")
+        return attrs
+
+
+class ClimateLogSerializer(_ZonePausedGuardMixin, serializers.ModelSerializer):
+    paused_action_label = "禁止新建气候记录"
     zoneId = serializers.PrimaryKeyRelatedField(
         source="zone", queryset=Zone.objects.all()
     )
@@ -107,7 +131,8 @@ class ClimateLogSerializer(serializers.ModelSerializer):
         return value
 
 
-class IrrigationCycleSerializer(serializers.ModelSerializer):
+class IrrigationCycleSerializer(_ZonePausedGuardMixin, serializers.ModelSerializer):
+    paused_action_label = "禁止新建轮灌"
     zoneId = serializers.PrimaryKeyRelatedField(
         source="zone", queryset=Zone.objects.all()
     )
